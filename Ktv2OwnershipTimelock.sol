@@ -62,9 +62,13 @@ contract Ktv2OwnershipTimelock is ReentrancyGuard {
         require(duration >= MIN_FREEZE_DURATION, "Below minimum");
         require(duration <= MAX_FREEZE_DURATION, "Exceeds maximum");
         
+currentLock = Lock({
+    originalOwner: msg.sender,
+    unlockTime: block.timestamp + duration,
+    active: true
+});
 
-        
-        emit OwnershipFrozen(msg.sender, currentLock.unlockTime, duration);
+emit OwnershipFrozen(msg.sender, currentLock.unlockTime, duration);
     }
     
     /**
@@ -72,19 +76,19 @@ contract Ktv2OwnershipTimelock is ReentrancyGuard {
      * @dev Callable only by original owner after unlock time expires
      */
     function restoreOwnership() external nonReentrant {
-        require(currentLock.active, "No active freeze");
-        require(msg.sender == currentLock.originalOwner, "Not original owner");
-        require(block.timestamp >= currentLock.unlockTime, "Not expired");
-        
-        address owner = currentLock.originalOwner;
-        
-        delete currentLock;
-        delete registeredOwner;
-        
-        Ownable(ktv2Contract).transferOwnership(owner);
-        
-        emit OwnershipRestored(owner, block.timestamp);
-    }
+    require(currentLock.active, "No active freeze");
+    require(msg.sender == currentLock.originalOwner, "Not original owner");
+    require(block.timestamp >= currentLock.unlockTime, "Not expired");
+
+    address owner = currentLock.originalOwner;
+
+    Ownable(ktv2Contract).transferOwnership(owner);
+
+    delete currentLock;
+    delete registeredOwner;
+
+    emit OwnershipRestored(owner, block.timestamp);
+}
     
     /**
      * @notice Extend current freeze period
@@ -95,6 +99,8 @@ contract Ktv2OwnershipTimelock is ReentrancyGuard {
         require(msg.sender == currentLock.originalOwner, "Not original owner");
         require(additionalDuration > 0, "Invalid duration");
         
+        uint256 newUnlockTime = currentLock.unlockTime + additionalDuration;
+        require(newUnlockTime <= block.timestamp + MAX_FREEZE_DURATION, "Exceeds maximum");
 
         
         currentLock.unlockTime = newUnlockTime;
@@ -107,10 +113,11 @@ contract Ktv2OwnershipTimelock is ReentrancyGuard {
      * @return Seconds remaining, or 0 if not frozen or expired
      */
     function timeUntilRestore() external view returns (uint256) {
-        if (!currentLock.active || block.timestamp >= currentLock.unlockTime) {
-            return 0;
-        }
-        return currentLock.unlockTime - block.timestamp;
+    if (!currentLock.active || block.timestamp >= currentLock.unlockTime) {
+        return 0;
+    }
+
+    return currentLock.unlockTime - block.timestamp;
     }
     
     /**
